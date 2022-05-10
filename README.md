@@ -9,11 +9,12 @@ The built contract artifacts can be browsed via [unpkg.com](https://unpkg.com/br
 
 # Local Development
 
-The following assumes the use of `node@>=10`.
+The following assumes the use of `node@>=12`.
 
 ## Install Dependencies
 
 `yarn`
+`forge install`
 
 ## Compile Contracts
 
@@ -22,3 +23,4 @@ The following assumes the use of `node@>=10`.
 ## Run Tests
 
 `yarn test`
+`forge test`

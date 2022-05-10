@@ -3,10 +3,14 @@ pragma solidity ^0.8.13;
 
 import "forge-std/Test.sol";
 
-contract ContractTest is Test {
+import "../contracts/UniswapV2Pair.sol";
+
+contract UniswapV2PairTest is Test {
+    IUniswapV2Pair pair;
+
     function setUp() public {}
 
-    function testExample() public {
+    function testswapTestCase() public {
         assertTrue(true);
     }
 }

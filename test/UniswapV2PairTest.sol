@@ -13,6 +13,13 @@ contract UniswapV2PairTest is Test {
     IERC20 private token0;
     IERC20 private token1;
 
+    uint112 constant  MINIMUM_LIQUIDITY = 10 ** 3;
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+    event Sync(uint112 reserve0, uint112 reserve1);
+    event Mint(address indexed sender, uint amount0, uint amount1);
+    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
+
+
     function setUp() public {
         vm.setNonce(address(this), 11); // used to order erc20's correctly in factory
         token0 = getStubToken(expandTo18Decimals(10000));
@@ -23,6 +30,39 @@ contract UniswapV2PairTest is Test {
 
         address pairAddress = factory.createPair(address(token0), address(token1));
         pair = IUniswapV2Pair(pairAddress);
+    }
+
+    function testMint() public {
+      uint256 token0Amount = expandTo18Decimals(1);
+      uint256 token1Amount = expandTo18Decimals(4);
+
+      token0.transfer(address(pair), token0Amount);
+      token1.transfer(address(pair), token1Amount);
+
+      uint256 expectedLiquidity = expandTo18Decimals(2);
+
+      vm.expectEmit(true, true, false, true);
+      emit Transfer(address(0),address(0),  MINIMUM_LIQUIDITY);
+      vm.expectEmit(true, true, false, true);
+      emit Transfer(address(0),address(this),  expectedLiquidity - MINIMUM_LIQUIDITY);
+
+      vm.expectEmit(false, false, false, true);
+      emit Sync(uint112(token0Amount), uint112(token1Amount));
+      vm.expectEmit(true, false, false, true);
+      emit Mint(address(this), token0Amount, token1Amount);
+
+      pair.mint(address(this));
+
+      assertEq(pair.totalSupply(), expectedLiquidity);
+      assertEq(pair.balanceOf(address(this)),  expectedLiquidity - MINIMUM_LIQUIDITY);
+      assertEq(token0.balanceOf(address(pair)), token0Amount);
+      assertEq(token1.balanceOf(address(pair)), token1Amount);
+
+      (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast) = pair.getReserves();
+
+      assertEq(_reserve0, token0Amount);
+      assertEq(_reserve1, token1Amount);
+
     }
 
     function testSwapTestCase1() public {

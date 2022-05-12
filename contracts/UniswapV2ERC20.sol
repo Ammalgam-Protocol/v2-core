@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.13;
 
 import './interfaces/IUniswapV2ERC20.sol';
@@ -7,12 +8,12 @@ contract UniswapV2ERC20 is IUniswapV2ERC20 {
     using SafeMath for uint;
 
     struct PermitParameters {
-        address owner; 
-        address spender; 
-        uint value; 
-        uint deadline; 
-        uint8 v; 
-        bytes32 r; 
+        address owner;
+        address spender;
+        uint value;
+        uint deadline;
+        uint8 v;
+        bytes32 r;
         bytes32 s;
     }
 
@@ -100,8 +101,8 @@ contract UniswapV2ERC20 is IUniswapV2ERC20 {
         );
         address recoveredAddress = ecrecover(digest, p.v, p.r, p.s);
         require(
-            recoveredAddress != address(0) 
-            && recoveredAddress == p.owner, 
+            recoveredAddress != address(0)
+            && recoveredAddress == p.owner,
             'UniswapV2: INVALID_SIGNATURE');
         _approve(p.owner, p.spender, p.value);
     }

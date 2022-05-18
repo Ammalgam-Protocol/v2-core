@@ -13,20 +13,19 @@ contract UniswapV2PairTest is Test {
     IERC20 private token0;
     IERC20 private token1;
 
-    uint112 constant  MINIMUM_LIQUIDITY = 10 ** 3;
+    uint112 constant MINIMUM_LIQUIDITY = 10**3;
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Sync(uint112 reserve0, uint112 reserve1);
-    event Mint(address indexed sender, uint amount0, uint amount1);
-    event Burn(address indexed sender, uint amount0, uint amount1, address indexed to);
+    event Mint(address indexed sender, uint256 amount0, uint256 amount1);
+    event Burn(address indexed sender, uint256 amount0, uint256 amount1, address indexed to);
     event Swap(
         address indexed sender,
-        uint amount0In,
-        uint amount1In,
-        uint amount0Out,
-        uint amount1Out,
+        uint256 amount0In,
+        uint256 amount1In,
+        uint256 amount0Out,
+        uint256 amount1Out,
         address indexed to
     );
-
 
     function setUp() public {
         vm.setNonce(address(this), 11); // used to order erc20's correctly in factory
@@ -40,36 +39,35 @@ contract UniswapV2PairTest is Test {
     }
 
     function testMint() public {
-      uint256 token0Amount = expandTo18Decimals(1);
-      uint256 token1Amount = expandTo18Decimals(4);
+        uint256 token0Amount = expandTo18Decimals(1);
+        uint256 token1Amount = expandTo18Decimals(4);
 
-      token0.transfer(address(pair), token0Amount);
-      token1.transfer(address(pair), token1Amount);
+        token0.transfer(address(pair), token0Amount);
+        token1.transfer(address(pair), token1Amount);
 
-      uint256 expectedLiquidity = expandTo18Decimals(2);
+        uint256 expectedLiquidity = expandTo18Decimals(2);
 
-      vm.expectEmit(true, true, false, true);
-      emit Transfer(address(0),address(0),  MINIMUM_LIQUIDITY);
-      vm.expectEmit(true, true, false, true);
-      emit Transfer(address(0),address(this),  expectedLiquidity - MINIMUM_LIQUIDITY);
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(address(0), address(0), MINIMUM_LIQUIDITY);
+        vm.expectEmit(true, true, false, true);
+        emit Transfer(address(0), address(this), expectedLiquidity - MINIMUM_LIQUIDITY);
 
-      vm.expectEmit(false, false, false, true);
-      emit Sync(uint112(token0Amount), uint112(token1Amount));
-      vm.expectEmit(true, false, false, true);
-      emit Mint(address(this), token0Amount, token1Amount);
+        vm.expectEmit(false, false, false, true);
+        emit Sync(uint112(token0Amount), uint112(token1Amount));
+        vm.expectEmit(true, false, false, true);
+        emit Mint(address(this), token0Amount, token1Amount);
 
-      pair.mint(address(this));
+        pair.mint(address(this));
 
-      assertEq(pair.totalSupply(), expectedLiquidity);
-      assertEq(pair.balanceOf(address(this)),  expectedLiquidity - MINIMUM_LIQUIDITY);
-      assertEq(token0.balanceOf(address(pair)), token0Amount);
-      assertEq(token1.balanceOf(address(pair)), token1Amount);
+        assertEq(pair.totalSupply(), expectedLiquidity);
+        assertEq(pair.balanceOf(address(this)), expectedLiquidity - MINIMUM_LIQUIDITY);
+        assertEq(token0.balanceOf(address(pair)), token0Amount);
+        assertEq(token1.balanceOf(address(pair)), token1Amount);
 
-      (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast) = pair.getReserves();
+        (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast) = pair.getReserves();
 
-      assertEq(_reserve0, token0Amount);
-      assertEq(_reserve1, token1Amount);
-
+        assertEq(_reserve0, token0Amount);
+        assertEq(_reserve1, token1Amount);
     }
 
     function testSwapTestCase1() public {
@@ -100,11 +98,16 @@ contract UniswapV2PairTest is Test {
         runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(1000), expandTo18Decimals(1000), 996006981039903216);
     }
 
-    function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount, uint expected) private {
+    function runSwapTestCase(
+        uint256 swapAmount,
+        uint256 token0Amount,
+        uint256 token1Amount,
+        uint256 expected
+    ) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), swapAmount);
 
-        vm.expectRevert("UniswapV2: K");
+        vm.expectRevert('UniswapV2: K');
         pair.swap(0, expected + 1, address(this), '');
 
         // Don't expect revert
@@ -112,26 +115,51 @@ contract UniswapV2PairTest is Test {
     }
 
     function testOptimisticTestCase1() public {
-        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(10), expandTo18Decimals(1));
+        runOptimisticSwapTestCase(
+            997000000000000000,
+            expandTo18Decimals(5),
+            expandTo18Decimals(10),
+            expandTo18Decimals(1)
+        );
     }
 
     function testOptimisticTestCase2() public {
-        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(10), expandTo18Decimals(5), expandTo18Decimals(1));
+        runOptimisticSwapTestCase(
+            997000000000000000,
+            expandTo18Decimals(10),
+            expandTo18Decimals(5),
+            expandTo18Decimals(1)
+        );
     }
 
     function testOptimisticTestCase3() public {
-        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(5), expandTo18Decimals(1));
+        runOptimisticSwapTestCase(
+            997000000000000000,
+            expandTo18Decimals(5),
+            expandTo18Decimals(5),
+            expandTo18Decimals(1)
+        );
     }
 
     function testOptimisticTestCase4() public {
-        runOptimisticSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(5), expandTo18Decimals(5), 1003009027081243732);
+        runOptimisticSwapTestCase(
+            expandTo18Decimals(1),
+            expandTo18Decimals(5),
+            expandTo18Decimals(5),
+            1003009027081243732
+        );
     }
 
-    function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount, uint inputAmount) private {
+    function runOptimisticSwapTestCase(
+        uint256 outputAmount,
+        uint256 token0Amount,
+        uint256 token1Amount,
+        uint256 inputAmount
+    ) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), inputAmount);
 
-        vm.expectRevert("UniswapV2: K");
+        vm.expectRevert('UniswapV2: K');
         pair.swap(outputAmount + 1, 0, address(this), '');
 
         // Don't expect revert
@@ -217,7 +245,7 @@ contract UniswapV2PairTest is Test {
         uint256 gasStart = gasleft();
         pair.swap(expectedOutputAmount, 0, address(this), '');
         uint256 gasEnd = gasleft();
-        assertEq(gasStart - gasEnd, 20311, "<- yarn to forge <- 74721 <- update to 0.8.13 <- 73462");
+        assertEq(gasStart - gasEnd, 20311, '<- yarn to forge <- 74721 <- update to 0.8.13 <- 73462');
     }
 
     function testBurn() public {
@@ -239,7 +267,7 @@ contract UniswapV2PairTest is Test {
         vm.expectEmit(true, true, false, true);
         emit Burn(address(this), token0Amount - 1000, token1Amount - 1000, address(this));
 
-        (uint outAmount0, uint outAmount1) = pair.burn(address(this));
+        (uint256 outAmount0, uint256 outAmount1) = pair.burn(address(this));
         assertEq(outAmount0, token0Amount - 1000);
         assertEq(outAmount1, token1Amount - 1000);
 
@@ -258,13 +286,13 @@ contract UniswapV2PairTest is Test {
         uint256 token1Amount = expandTo18Decimals(3);
         addLiquidity(token0Amount, token1Amount);
 
-        (,, uint32 blockTimestamp1) = pair.getReserves();
+        (, , uint32 blockTimestamp1) = pair.getReserves();
         mineBlock(2, blockTimestamp1 + 1);
         pair.sync();
         (uint256 initialPrice0, uint256 initialPrice1) = encodePrice(token0Amount, token1Amount);
         assertEq(pair.price0CumulativeLast(), initialPrice0);
         assertEq(pair.price1CumulativeLast(), initialPrice1);
-        (,, uint32 blockTimestamp2) = pair.getReserves();
+        (, , uint32 blockTimestamp2) = pair.getReserves();
         assertEq(blockTimestamp2, blockTimestamp1 + 1);
 
         uint256 swapAmount = expandTo18Decimals(3);
@@ -275,7 +303,7 @@ contract UniswapV2PairTest is Test {
 
         assertEq(pair.price0CumulativeLast(), initialPrice0 * 10);
         assertEq(pair.price1CumulativeLast(), initialPrice1 * 10);
-        (,, uint32 blockTimestamp3) = pair.getReserves();
+        (, , uint32 blockTimestamp3) = pair.getReserves();
         assertEq(blockTimestamp3, blockTimestamp1 + 10);
 
         mineBlock(4, blockTimestamp1 + 20);
@@ -284,7 +312,7 @@ contract UniswapV2PairTest is Test {
         (uint256 newPrice0, uint256 newPrice1) = encodePrice(expandTo18Decimals(6), expandTo18Decimals(2));
         assertEq(pair.price0CumulativeLast(), initialPrice0 * 10 + newPrice0 * 10);
         assertEq(pair.price1CumulativeLast(), initialPrice1 * 10 + newPrice1 * 10);
-        (,, uint32 blockTimestamp4) = pair.getReserves();
+        (, , uint32 blockTimestamp4) = pair.getReserves();
         assertEq(blockTimestamp4, blockTimestamp1 + 20);
     }
 
@@ -344,8 +372,8 @@ contract UniswapV2PairTest is Test {
     }
 
     function encodePrice(uint256 reserve0, uint256 reserve1) private pure returns (uint256 price0, uint256 price1) {
-        price0 = reserve1 * (2 ** 112) / reserve0;
-        price1 = reserve0 * (2 ** 112) / reserve1;
+        price0 = (reserve1 * (2**112)) / reserve0;
+        price1 = (reserve0 * (2**112)) / reserve1;
     }
 
     function getStubToken(uint256 mintAmount_) private returns (IERC20) {
@@ -368,15 +396,15 @@ contract StubERC20 is IERC20 {
     }
 
     function name() public view virtual override returns (string memory) {
-        revert("name not used for tests.");
+        revert('name not used for tests.');
     }
 
     function symbol() public view virtual override returns (string memory) {
-        revert("symbol not used for tests.");
+        revert('symbol not used for tests.');
     }
 
     function decimals() public view virtual override returns (uint8) {
-        revert("decimals not used for tests.");
+        revert('decimals not used for tests.');
     }
 
     function totalSupply() public view virtual override returns (uint256) {
@@ -389,7 +417,7 @@ contract StubERC20 is IERC20 {
 
     function transfer(address to, uint256 amount) public virtual override returns (bool) {
         uint256 fromBalance = _balances[msg.sender];
-        require(fromBalance >= amount, "ERC20: transfer amount exceeds balance");
+        require(fromBalance >= amount, 'ERC20: transfer amount exceeds balance');
         _balances[msg.sender] = fromBalance - amount;
         _balances[to] += amount;
         emit Transfer(msg.sender, to, amount);
@@ -397,11 +425,11 @@ contract StubERC20 is IERC20 {
     }
 
     function allowance(address owner, address spender) public view virtual override returns (uint256) {
-        revert("allowance not used for tests.");
+        revert('allowance not used for tests.');
     }
 
     function approve(address spender, uint256 amount) public virtual override returns (bool) {
-        revert("approve not used for tests.");
+        revert('approve not used for tests.');
     }
 
     function transferFrom(
@@ -409,7 +437,7 @@ contract StubERC20 is IERC20 {
         address to,
         uint256 amount
     ) public virtual override returns (bool) {
-        revert("transferFrom not used for tests.");
+        revert('transferFrom not used for tests.');
         return true;
     }
 }

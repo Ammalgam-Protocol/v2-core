@@ -13,7 +13,11 @@ contract UniswapV2PairTest is Test {
     IERC20 private token0;
     IERC20 private token1;
 
-    uint112 constant  MINIMUM_LIQUIDITY = 10 ** 3;
+    uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
+    uint112 constant MAXIMUM_SUPPLY = 10 ** 4;
+    // Todo - (MT): For #1, see if we can do away with this threshold:
+    uint112 constant MINIMUM_SWAP_AMOUNT = 10 ** 2;
+
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Sync(uint112 reserve0, uint112 reserve1);
     event Mint(address indexed sender, uint amount0, uint amount1);
@@ -22,8 +26,8 @@ contract UniswapV2PairTest is Test {
 
     function setUp() public {
         vm.setNonce(address(this), 11); // used to order erc20's correctly in factory
-        token0 = getStubToken(expandTo18Decimals(10000));
-        token1 = getStubToken(expandTo18Decimals(10000));
+        token0 = getStubToken(expandTo18Decimals(MAXIMUM_SUPPLY));
+        token1 = getStubToken(expandTo18Decimals(MAXIMUM_SUPPLY));
 
         factory = new UniswapV2Factory(address(this));
         factory.setFeeTo(address(this));
@@ -66,36 +70,56 @@ contract UniswapV2PairTest is Test {
     }
 
     function testSwapTestCase1() public {
-        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(5), expandTo18Decimals(10), 1662497915624478906);
+        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(5), expandTo18Decimals(10));
     }
 
     function testSwapTestCase2() public {
-        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(10), expandTo18Decimals(5), 453305446940074565);
+        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(10), expandTo18Decimals(5));
     }
 
     function testSwapTestCase3() public {
-        runSwapTestCase(expandTo18Decimals(2), expandTo18Decimals(5), expandTo18Decimals(10), 2851015155847869602);
+        runSwapTestCase(expandTo18Decimals(2), expandTo18Decimals(5), expandTo18Decimals(10));
     }
 
     function testSwapTestCase4() public {
-        runSwapTestCase(expandTo18Decimals(2), expandTo18Decimals(10), expandTo18Decimals(5), 831248957812239453);
+        runSwapTestCase(expandTo18Decimals(2), expandTo18Decimals(10), expandTo18Decimals(5));
     }
 
     function testSwapTestCase5() public {
-        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(10), expandTo18Decimals(10), 906610893880149131);
+        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(10), expandTo18Decimals(10));
     }
 
     function testSwapTestCase6() public {
-        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(100), expandTo18Decimals(100), 987158034397061298);
+        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(100), expandTo18Decimals(100));
     }
 
     function testSwapTestCase7() public {
-        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(1000), expandTo18Decimals(1000), 996006981039903216);
+        runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(1000), expandTo18Decimals(1000));
     }
 
-    function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount, uint expected) private {
+    function testSwapFuzzTestCase(uint swapVal, uint token0Val, uint token1Val) public {
+        (uint swapAmount, uint token0Amount, uint token1Amount) = generateSwapFuzzCase(swapVal, token0Val, token1Val);
+        // Todo - (MT): For #1, drop this check once we avoid generating out amounts of 0 in swaps:
+        vm.assume(computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount) > 0);
+        runSwapTestCase(swapAmount, token0Amount, token1Amount);
+    }
+
+    function generateSwapFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
+            returns (uint _swapAmount, uint _token0Amount, uint _token1Amount) {
+
+        // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
+        _token0Amount = mapSeedToRange(token0AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        _token1Amount = mapSeedToRange(token1AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        // Todo - (MT): For #1, do we need to better clamp this to cover the following two conditions?
+        //  0 < computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount)
+        //  computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount) + MINIMUM_LIQUIDITY < expandTo18Decimals(MAXIMUM_SUPPLY)
+        _swapAmount = mapSeedToRange(swapSeed, MINIMUM_SWAP_AMOUNT, _token0Amount);
+    }
+
+    function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), swapAmount);
+        uint expected = computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount);
 
         vm.expectRevert("UniswapV2: K");
         pair.swap(0, expected + 1, address(this), '');
@@ -104,24 +128,54 @@ contract UniswapV2PairTest is Test {
         pair.swap(0, expected, address(this), '');
     }
 
+    function computeExpectedSwapAmount(uint swapAmount, uint token0Amount, uint token1Amount) private returns (uint256) {
+        // Compute new balance for token 0 with fees reduced (multiplied by 1000):
+        uint newBalance0Adjusted = ((token0Amount + swapAmount) * 1000) - (swapAmount * 3);
+
+        // Determine new target K value when the adjusted balances are multiplied (1000x what it should be to match previous units):
+        uint kAdjusted = token0Amount * token1Amount * 1000;
+
+        // Find the new target balance for token 1:
+        uint newBalance1 = kAdjusted / newBalance0Adjusted;
+
+        // The expected amount of token1 needing to be taken out, subtracting to undo any rounding up if needed:
+        uint roundDownAmount = kAdjusted % newBalance0Adjusted == 0 ? 0 : 1;
+        return token1Amount - newBalance1 - roundDownAmount;
+    }
+
     function testOptimisticTestCase1() public {
-        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(10), expandTo18Decimals(1));
+        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(10));
     }
 
     function testOptimisticTestCase2() public {
-        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(10), expandTo18Decimals(5), expandTo18Decimals(1));
+        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(10), expandTo18Decimals(5));
     }
 
     function testOptimisticTestCase3() public {
-        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(5), expandTo18Decimals(1));
+        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(5));
     }
 
     function testOptimisticTestCase4() public {
-        runOptimisticSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(5), expandTo18Decimals(5), 1003009027081243732);
+        runOptimisticSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(5), expandTo18Decimals(5));
     }
 
-    function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount, uint inputAmount) private {
+    function testOptimisticFuzzTestCase(uint outputVal, uint token0Val, uint token1Val) public {
+        (uint outputAmount, uint token0Amount, uint token1Amount) = generateOptimisticFuzzCase(outputVal, token0Val, token1Val);
+        runOptimisticSwapTestCase(outputAmount, token0Amount, token1Amount);
+    }
+
+    function generateOptimisticFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
+            returns (uint _outputAmount, uint _token0Amount, uint _token1Amount) {
+
+        // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
+        _token0Amount = mapSeedToRange(token0AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        _token1Amount = mapSeedToRange(token1AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        _outputAmount = mapSeedToRange(swapSeed, MINIMUM_SWAP_AMOUNT, _token0Amount);
+    }
+
+    function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount) private {
         addLiquidity(token0Amount, token1Amount);
+        uint inputAmount = computeOptimisticInputAmount(outputAmount);
         token0.transfer(address(pair), inputAmount);
 
         vm.expectRevert("UniswapV2: K");
@@ -131,11 +185,16 @@ contract UniswapV2PairTest is Test {
         pair.swap(outputAmount, 0, address(this), '');
     }
 
+    function computeOptimisticInputAmount(uint outputAmount) private returns (uint256) {
+        // The output amount is always 99.7% of the input amount, so simply reverse it out (and round up if needed):
+        uint roundUpAmount = (outputAmount * 1000) % 997 == 0 ? 0 : 1;
+        return ((outputAmount * 1000) / 997) + roundUpAmount;
+    }
+
     function addLiquidity(uint256 token0Amount, uint256 token1Amount) private {
         token0.transfer(address(pair), token0Amount);
         token1.transfer(address(pair), token1Amount);
         pair.mint(address(this));
-
     }
 
     function expandTo18Decimals(uint256 x) private pure returns (uint256) {
@@ -144,6 +203,12 @@ contract UniswapV2PairTest is Test {
 
     function getStubToken(uint256 mintAmount_) private returns (IERC20) {
         return new StubERC20(mintAmount_);
+    }
+
+    function mapSeedToRange(uint seed, uint minInclusive, uint maxExclusive) private returns (uint) {
+        require(minInclusive < maxExclusive, "minInclusive must be strictly less than maxExclusive");
+        uint rangeWidth = maxExclusive - minInclusive - 1;
+        return (seed % rangeWidth) + minInclusive;
     }
 }
 

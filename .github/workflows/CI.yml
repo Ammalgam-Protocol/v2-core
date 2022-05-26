@@ -7,7 +7,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  node:
     strategy:
       matrix:
         node: ['10.x', '12.x']
@@ -16,8 +16,8 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v1
-      - uses: actions/setup-node@v1
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node }}
 
@@ -35,3 +35,16 @@ jobs:
       - run: yarn
       - run: yarn lint
       - run: yarn test
+  forge:
+    runs-on: [ubuntu-latest]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Install Forge
+        run: |
+          curl -L https://foundry.paradigm.xyz | bash
+          /home/runner/.foundry/bin/foundryup
+      - name: Run Forge build
+        run: /home/runner/.foundry/bin/forge install
+      - name: Run tests
+        run: /home/runner/.foundry/bin/forge test --gas-report

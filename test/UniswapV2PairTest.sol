@@ -104,6 +104,7 @@ contract UniswapV2PairTest is Test {
         runSwapTestCase(swapAmount, token0Amount, token1Amount);
     }
 
+    // Todo - (MT): For #1, check all fuzz test cases to ensure we are using proper uint types (generally 112 to not overflow):
     function generateSwapFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _swapAmount, uint _token0Amount, uint _token1Amount) {
 
@@ -167,10 +168,19 @@ contract UniswapV2PairTest is Test {
     function generateOptimisticFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _outputAmount, uint _token0Amount, uint _token1Amount) {
 
+        // Token 0 needs at least: A) one to take out, B) one balance remaining, and C) some decrease for fees:
+        uint minToken0Amount = 3;
         // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
-        _token0Amount = mapSeedToRange(token0AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
-        _token1Amount = mapSeedToRange(token1AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
-        _outputAmount = mapSeedToRange(swapSeed, MINIMUM_SWAP_AMOUNT, _token0Amount);
+        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+
+        // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
+        uint minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
+        // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
+        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+
+        // We need to ensure the computed input amount (covering 0.3% fees) does not exceed available input tokens (with one remaining):
+        uint maxOutputAmount = divCeil(_token0Amount * 997, 1000) - 1;
+        _outputAmount = mapSeedToRange(swapSeed, 1, maxOutputAmount);
     }
 
     function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount) private {
@@ -187,8 +197,7 @@ contract UniswapV2PairTest is Test {
 
     function computeOptimisticInputAmount(uint outputAmount) private returns (uint256) {
         // The output amount is always 99.7% of the input amount, so simply reverse it out (and round up if needed):
-        uint roundUpAmount = (outputAmount * 1000) % 997 == 0 ? 0 : 1;
-        return ((outputAmount * 1000) / 997) + roundUpAmount;
+        return divCeil(outputAmount * 1000, 997);
     }
 
     function addLiquidity(uint256 token0Amount, uint256 token1Amount) private {
@@ -205,9 +214,14 @@ contract UniswapV2PairTest is Test {
         return new StubERC20(mintAmount_);
     }
 
+    function divCeil(uint numerand, uint divisor) private returns (uint) {
+        uint roundUpAmount = numerand % divisor == 0 ? 0 : 1;
+        return (numerand / divisor) + roundUpAmount;
+    }
+
     function mapSeedToRange(uint seed, uint minInclusive, uint maxExclusive) private returns (uint) {
         require(minInclusive < maxExclusive, "minInclusive must be strictly less than maxExclusive");
-        uint rangeWidth = maxExclusive - minInclusive - 1;
+        uint rangeWidth = maxExclusive - minInclusive;
         return (seed % rangeWidth) + minInclusive;
     }
 }

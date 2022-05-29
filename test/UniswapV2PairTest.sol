@@ -97,8 +97,6 @@ contract UniswapV2PairTest is Test {
 
     function testSwapFuzzTestCase(uint swapVal, uint token0Val, uint token1Val) public {
         (uint swapAmount, uint token0Amount, uint token1Amount) = generateSwapFuzzCase(swapVal, token0Val, token1Val);
-        // Todo - (MT): For #1, drop this check once we avoid generating out amounts of 0 in swaps:
-        vm.assume(computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount) > 0);
         runSwapTestCase(swapAmount, token0Amount, token1Amount);
     }
 
@@ -120,20 +118,13 @@ contract UniswapV2PairTest is Test {
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1AmountLiquidity = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
-        // Todo - (MT): For #1, figure out why this formula is not quite working as intended for token0 >> token1
         // Make sure we will have enough output tokens for the output amount to be non-zero for the swap input:
-        uint token0ChangeRatioAdjusted = computeAdjustedChangeRatio(_swapAmount, _token0Amount);
-        uint minToken1ForSwap = divCeil((1000 ** 3), ((1000 ** 3) - token0ChangeRatioAdjusted));
+        uint netSwapAmountAdjusted = _swapAmount * 997;
+        uint token0AmountAdjusted = _token0Amount * 1000;
+        uint minToken1ForSwap = divCeil(token0AmountAdjusted + netSwapAmountAdjusted, netSwapAmountAdjusted);
         // Token 1 can take all of the global supply without constraints:
         uint maxToken1AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY);
         _token1Amount = mapSeedToRange(token1AmountSeed, max(minToken1AmountLiquidity, minToken1ForSwap), maxToken1AmountInclusive + 1);
-    }
-
-    // This gets a ratio of 9 digits worth of change to be factored into a calculation:
-    function computeAdjustedChangeRatio(uint swapAmount, uint token0Amount) private returns (uint) {
-        uint newToken0BalanceAdjusted = (token0Amount * 1000) + (swapAmount * 997);
-        uint token0ChangeRatioAdjusted = divCeil(token0Amount * (1000 ** 4), newToken0BalanceAdjusted) + 1;
-        return token0ChangeRatioAdjusted < (1000 ** 3) ? token0ChangeRatioAdjusted : (1000 * 3) - 1;
     }
 
     function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {

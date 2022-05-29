@@ -110,13 +110,14 @@ contract UniswapV2PairTest is Test {
 
         // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
         _token0Amount = mapSeedToRange(token0AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
-        _token1Amount = mapSeedToRange(token1AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        _token1Amount = mapSeedToRange(token1AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) + 1);
         // Todo - (MT): For #1, do we need to better clamp this to cover the following two conditions?
         //  0 < computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount)
         //  computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount) + MINIMUM_LIQUIDITY < expandTo18Decimals(MAXIMUM_SUPPLY)
         _swapAmount = mapSeedToRange(swapSeed, MINIMUM_SWAP_AMOUNT, _token0Amount);
     }
 
+    // Todo - (MT): For 1, see on all of these if we can better handle variable sizes.
     function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), swapAmount);
@@ -165,22 +166,26 @@ contract UniswapV2PairTest is Test {
         runOptimisticSwapTestCase(outputAmount, token0Amount, token1Amount);
     }
 
-    function generateOptimisticFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
+    function generateOptimisticFuzzCase(uint outputAmountSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _outputAmount, uint _token0Amount, uint _token1Amount) {
 
         // Token 0 needs at least: A) one to take out, B) one balance remaining, and C) some decrease for fees:
         uint minToken0Amount = 3;
-        // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
-        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        // Token 0 needs to leave in the global token supply at least three for the input amount for the same reasons to not fail input transfer:
+        uint maxToken0AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY) - minToken0Amount;
+        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0AmountInclusive + 1);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
-        // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
-        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
+        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, expandTo18Decimals(MAXIMUM_SUPPLY) + 1);
 
-        // We need to ensure the computed input amount (covering 0.3% fees) does not exceed available input tokens (with one remaining):
-        uint maxOutputAmount = divCeil(_token0Amount * 997, 1000) - 1;
-        _outputAmount = mapSeedToRange(swapSeed, 1, maxOutputAmount);
+        // Todo - (MT): For #1, figure out why these are not inclusive (i.e., where is the one going which fails on the edge case?):
+        uint maxOutputAmount = min(
+            // We need to ensure the computed input amount (covering 0.3% fees) does not exceed available input tokens (with one remaining):
+            divCeil(_token0Amount * 997, 1000) - 1,
+            // We also must ensure there are enough tokens left in global supply that the input transfer does not exceed total available:
+            divCeil((expandTo18Decimals(MAXIMUM_SUPPLY) - _token0Amount) * 997, 1000) - 1);
+        _outputAmount = mapSeedToRange(outputAmountSeed, 1, maxOutputAmount);
     }
 
     function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount) private {
@@ -217,6 +222,10 @@ contract UniswapV2PairTest is Test {
     function divCeil(uint numerand, uint divisor) private returns (uint) {
         uint roundUpAmount = numerand % divisor == 0 ? 0 : 1;
         return (numerand / divisor) + roundUpAmount;
+    }
+
+    function min(uint a, uint b) private returns (uint) {
+        return a < b ? a : b;
     }
 
     function mapSeedToRange(uint seed, uint minInclusive, uint maxExclusive) private returns (uint) {

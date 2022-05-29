@@ -15,8 +15,6 @@ contract UniswapV2PairTest is Test {
 
     uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
     uint112 constant MAXIMUM_SUPPLY = 10 ** 4;
-    // Todo - (MT): For #1, see if we can do away with this threshold:
-    uint112 constant MINIMUM_SWAP_AMOUNT = 10 ** 2;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Sync(uint112 reserve0, uint112 reserve1);
@@ -108,16 +106,36 @@ contract UniswapV2PairTest is Test {
     function generateSwapFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _swapAmount, uint _token0Amount, uint _token1Amount) {
 
-        // Todo - (MT): For #1, see if we can do away with halving the maximum supply.
-        _token0Amount = mapSeedToRange(token0AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) / 2 + 1);
-        _token1Amount = mapSeedToRange(token1AmountSeed, MINIMUM_LIQUIDITY + 1, expandTo18Decimals(MAXIMUM_SUPPLY) + 1);
-        // Todo - (MT): For #1, do we need to better clamp this to cover the following two conditions?
-        //  0 < computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount)
-        //  computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount) + MINIMUM_LIQUIDITY < expandTo18Decimals(MAXIMUM_SUPPLY)
-        _swapAmount = mapSeedToRange(swapSeed, MINIMUM_SWAP_AMOUNT, _token0Amount);
+        // The swap amount cannot be zero, but others should be generally accepted:
+        uint minSwapAmount = 1;
+        // The swap amount can go up to half of the maximum supply, minus one (as the swap cannot exceed the pool size for token 0):
+        uint maxSwapAmountInclusive = (expandTo18Decimals(MAXIMUM_SUPPLY) / 2) - 1;
+        _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmountInclusive + 1);
+
+        // Token 0 needs to be at least one more than the swap amount (otherwise it'd drain all liquidity):
+        uint minToken0Amount = _swapAmount + 1;
+        // Token 0 needs to leave enough in the global supply for the client to transfer as part of the swap:
+        uint maxToken0AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY) - _swapAmount;
+        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0AmountInclusive + 1);
+
+        // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
+        uint minToken1AmountLiquidity = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
+        // Todo - (MT): For #1, figure out why this formula is not quite working as intended for token0 >> token1
+        // Make sure we will have enough output tokens for the output amount to be non-zero for the swap input:
+        uint token0ChangeRatioAdjusted = computeAdjustedChangeRatio(_swapAmount, _token0Amount);
+        uint minToken1ForSwap = divCeil((1000 ** 3), ((1000 ** 3) - token0ChangeRatioAdjusted));
+        // Token 1 can take all of the global supply without constraints:
+        uint maxToken1AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY);
+        _token1Amount = mapSeedToRange(token1AmountSeed, max(minToken1AmountLiquidity, minToken1ForSwap), maxToken1AmountInclusive + 1);
     }
 
-    // Todo - (MT): For 1, see on all of these if we can better handle variable sizes.
+    // This gets a ratio of 9 digits worth of change to be factored into a calculation:
+    function computeAdjustedChangeRatio(uint swapAmount, uint token0Amount) private returns (uint) {
+        uint newToken0BalanceAdjusted = (token0Amount * 1000) + (swapAmount * 997);
+        uint token0ChangeRatioAdjusted = divCeil(token0Amount * (1000 ** 4), newToken0BalanceAdjusted) + 1;
+        return token0ChangeRatioAdjusted < (1000 ** 3) ? token0ChangeRatioAdjusted : (1000 * 3) - 1;
+    }
+
     function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), swapAmount);
@@ -137,12 +155,8 @@ contract UniswapV2PairTest is Test {
         // Determine new target K value when the adjusted balances are multiplied (1000x what it should be to match previous units):
         uint kAdjusted = token0Amount * token1Amount * 1000;
 
-        // Find the new target balance for token 1:
-        uint newBalance1 = kAdjusted / newBalance0Adjusted;
-
-        // The expected amount of token1 needing to be taken out, subtracting to undo any rounding up if needed:
-        uint roundDownAmount = kAdjusted % newBalance0Adjusted == 0 ? 0 : 1;
-        return token1Amount - newBalance1 - roundDownAmount;
+        // Find the new target balance for token 1 and subtract it from the original amount to get expected output:
+        return token1Amount - divCeil(kAdjusted, newBalance0Adjusted);
     }
 
     function testOptimisticTestCase1() public {
@@ -226,6 +240,10 @@ contract UniswapV2PairTest is Test {
 
     function min(uint a, uint b) private returns (uint) {
         return a < b ? a : b;
+    }
+
+    function max(uint a, uint b) private returns (uint) {
+        return a > b ? a : b;
     }
 
     function mapSeedToRange(uint seed, uint minInclusive, uint maxExclusive) private returns (uint) {

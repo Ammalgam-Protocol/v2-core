@@ -14,6 +14,7 @@ contract UniswapV2PairTest is Test {
     IERC20 private token1;
 
     uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
+    // Todo - (MT): For #1, inline this (avoid need to expand to 18 everywhere):
     uint112 constant MAXIMUM_SUPPLY = 10 ** 4;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -113,13 +114,15 @@ contract UniswapV2PairTest is Test {
         // Token 0 needs to be at least one more than the swap amount (otherwise it'd drain all liquidity):
         uint minToken0Amount = _swapAmount + 1;
         // Token 0 needs to leave enough in the global supply for the client to transfer as part of the swap:
-        uint maxToken0AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY) - _swapAmount;
-        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0AmountInclusive + 1);
+        uint maxToken0AmountSwapInclusive = expandTo18Decimals(MAXIMUM_SUPPLY) - _swapAmount;
+        // Token 0 also needs to ensure the required amount for token 1 does not exceed max supply:
+        uint netSwapAmountAdjusted = _swapAmount * 997;
+        uint maxToken0AmountSwapToken1 = (netSwapAmountAdjusted * (expandTo18Decimals(MAXIMUM_SUPPLY) - 1) / 1000);
+        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, min(maxToken0AmountSwapInclusive, maxToken0AmountSwapToken1) + 1);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1AmountLiquidity = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
         // Make sure we will have enough output tokens for the output amount to be non-zero for the swap input:
-        uint netSwapAmountAdjusted = _swapAmount * 997;
         uint token0AmountAdjusted = _token0Amount * 1000;
         uint minToken1ForSwap = divCeil(token0AmountAdjusted + netSwapAmountAdjusted, netSwapAmountAdjusted);
         // Token 1 can take all of the global supply without constraints:

@@ -14,8 +14,7 @@ contract UniswapV2PairTest is Test {
     IERC20 private token1;
 
     uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
-    // Todo - (MT): For #1, inline this (avoid need to expand to 18 everywhere):
-    uint112 constant MAXIMUM_SUPPLY = 10 ** 4;
+    uint112 constant MAXIMUM_SUPPLY = 10 ** (18 + 4);
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Sync(uint112 reserve0, uint112 reserve1);
@@ -25,8 +24,8 @@ contract UniswapV2PairTest is Test {
 
     function setUp() public {
         vm.setNonce(address(this), 11); // used to order erc20's correctly in factory
-        token0 = getStubToken(expandTo18Decimals(MAXIMUM_SUPPLY));
-        token1 = getStubToken(expandTo18Decimals(MAXIMUM_SUPPLY));
+        token0 = getStubToken(MAXIMUM_SUPPLY);
+        token1 = getStubToken(MAXIMUM_SUPPLY);
 
         factory = new UniswapV2Factory(address(this));
         factory.setFeeTo(address(this));
@@ -101,23 +100,22 @@ contract UniswapV2PairTest is Test {
         runSwapTestCase(swapAmount, token0Amount, token1Amount);
     }
 
-    // Todo - (MT): For #1, check all fuzz test cases to ensure we are using proper uint types (generally 112 to not overflow):
     function generateSwapFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _swapAmount, uint _token0Amount, uint _token1Amount) {
 
         // The swap amount cannot be zero, but others should be generally accepted:
         uint minSwapAmount = 1;
-        // The swap amount can go up to half of the maximum supply, minus one (as the swap cannot exceed the pool size for token 0):
-        uint maxSwapAmountInclusive = (expandTo18Decimals(MAXIMUM_SUPPLY) / 2) - 1;
+        // The swap amount cannot match/exceed token 0's amount (as it'd pull too much token 1 liquidity from the pool), so split max supply in half:
+        uint maxSwapAmountInclusive = (MAXIMUM_SUPPLY / 2) - 1;
         _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmountInclusive + 1);
 
         // Token 0 needs to be at least one more than the swap amount (otherwise it'd drain all liquidity):
         uint minToken0Amount = _swapAmount + 1;
         // Token 0 needs to leave enough in the global supply for the client to transfer as part of the swap:
-        uint maxToken0AmountSwapInclusive = expandTo18Decimals(MAXIMUM_SUPPLY) - _swapAmount;
+        uint maxToken0AmountSwapInclusive = MAXIMUM_SUPPLY - _swapAmount;
         // Token 0 also needs to ensure the required amount for token 1 does not exceed max supply:
         uint netSwapAmountAdjusted = _swapAmount * 997;
-        uint maxToken0AmountSwapToken1 = (netSwapAmountAdjusted * (expandTo18Decimals(MAXIMUM_SUPPLY) - 1) / 1000);
+        uint maxToken0AmountSwapToken1 = (netSwapAmountAdjusted * (MAXIMUM_SUPPLY - 1) / 1000);
         _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, min(maxToken0AmountSwapInclusive, maxToken0AmountSwapToken1) + 1);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
@@ -126,7 +124,7 @@ contract UniswapV2PairTest is Test {
         uint token0AmountAdjusted = _token0Amount * 1000;
         uint minToken1ForSwap = divCeil(token0AmountAdjusted + netSwapAmountAdjusted, netSwapAmountAdjusted);
         // Token 1 can take all of the global supply without constraints:
-        uint maxToken1AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY);
+        uint maxToken1AmountInclusive = MAXIMUM_SUPPLY;
         _token1Amount = mapSeedToRange(token1AmountSeed, max(minToken1AmountLiquidity, minToken1ForSwap), maxToken1AmountInclusive + 1);
     }
 
@@ -180,20 +178,19 @@ contract UniswapV2PairTest is Test {
         // Token 0 needs at least: A) one to take out, B) one balance remaining, and C) some decrease for fees:
         uint minToken0Amount = 3;
         // Token 0 needs to leave in the global token supply at least three for the input amount for the same reasons to not fail input transfer:
-        uint maxToken0AmountInclusive = expandTo18Decimals(MAXIMUM_SUPPLY) - minToken0Amount;
+        uint maxToken0AmountInclusive = MAXIMUM_SUPPLY - minToken0Amount;
         _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0AmountInclusive + 1);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
-        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, expandTo18Decimals(MAXIMUM_SUPPLY) + 1);
+        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_SUPPLY + 1);
 
-        // Todo - (MT): For #1, figure out why these are not inclusive (i.e., where is the one going which fails on the edge case?):
-        uint maxOutputAmount = min(
+        uint maxOutputAmountInclusive = min(
             // We need to ensure the computed input amount (covering 0.3% fees) does not exceed available input tokens (with one remaining):
-            divCeil(_token0Amount * 997, 1000) - 1,
+            ((_token0Amount * 997) / 1000) - 1,
             // We also must ensure there are enough tokens left in global supply that the input transfer does not exceed total available:
-            divCeil((expandTo18Decimals(MAXIMUM_SUPPLY) - _token0Amount) * 997, 1000) - 1);
-        _outputAmount = mapSeedToRange(outputAmountSeed, 1, maxOutputAmount);
+            divCeil((MAXIMUM_SUPPLY - _token0Amount) * 997, 1000) - 1);
+        _outputAmount = mapSeedToRange(outputAmountSeed, 1, maxOutputAmountInclusive + 1);
     }
 
     function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount) private {

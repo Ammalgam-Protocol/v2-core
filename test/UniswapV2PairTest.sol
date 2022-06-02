@@ -112,8 +112,8 @@ contract UniswapV2PairTest is Test {
         // The swap amount cannot be zero, but others should be generally accepted:
         uint minSwapAmount = 1;
         // The swap amount cannot match/exceed token 0's amount (as it'd pull too much token 1 liquidity from the pool), so split max supply in half:
-        uint maxSwapAmountInclusive = MAXIMUM_SUPPLY/2; // +1 should fail
-        _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmountInclusive + 1);
+        uint maxSwapAmount = MAXIMUM_SUPPLY/2; // +1 should fail as the swap input tranfer would fail
+        _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmount);
 
         // Token 0 needs to be at least one more than the swap amount (otherwise it'd drain all liquidity):
         uint minToken0Amount = _swapAmount + 1;
@@ -122,8 +122,7 @@ contract UniswapV2PairTest is Test {
         // Token 0 also needs to ensure the required amount for token 1 does not exceed max supply:
         uint netSwapAmountAdjusted = _swapAmount * 997;
         uint maxToken0AmountSwapToken1 = (netSwapAmountAdjusted * (MAXIMUM_SUPPLY - 1) / 1000);
-
-        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, min(maxToken0AmountSwapInclusive, maxToken0AmountSwapToken1) + 1);
+        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, min(maxToken0AmountSwapInclusive, maxToken0AmountSwapToken1));
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1AmountLiquidity = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
@@ -132,7 +131,7 @@ contract UniswapV2PairTest is Test {
         uint minToken1ForSwap = divCeil(token0AmountAdjusted + netSwapAmountAdjusted, netSwapAmountAdjusted);
         // Token 1 can take all of the global supply without constraints:
         uint maxToken1AmountInclusive = MAXIMUM_SUPPLY;
-        _token1Amount = mapSeedToRange(token1AmountSeed, max(minToken1AmountLiquidity, minToken1ForSwap), maxToken1AmountInclusive );
+        _token1Amount = mapSeedToRange(token1AmountSeed, max(minToken1AmountLiquidity, minToken1ForSwap), maxToken1AmountInclusive);
     }
 
     function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {
@@ -191,9 +190,6 @@ contract UniswapV2PairTest is Test {
     }
 
     function testOptimisticFuzzTestCase(uint outputVal, uint token0Val, uint token1Val) public {
-
-        vm.assume(outputVal > 1 && token0Val > 1 && token1Val > 1);
-
         (uint outputAmount, uint token0Amount, uint token1Amount) = generateOptimisticFuzzCase(outputVal, token0Val, token1Val);
         runOptimisticSwapTestCase(outputAmount, token0Amount, token1Amount);
     }
@@ -201,22 +197,21 @@ contract UniswapV2PairTest is Test {
     function generateOptimisticFuzzCase(uint outputAmountSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _outputAmount, uint _token0Amount, uint _token1Amount) {
 
-        // Token 0 needs at least: A) one to take out, B) one balance remaining, and C) some decrease for fees:
-        uint minToken0Amount = 1;
-        // Token 0 needs to leave in the global token supply at least three for the input amount for the same reasons to not fail input transfer:
-        uint maxToken0AmountInclusive = MAXIMUM_SUPPLY; // + 1 should fail FAIL. Reason: Arithmetic over/underflow.
-        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0AmountInclusive + 1);
+        // Token 0 needs at least: A) one output amount to take out and B) one remaining, otherwise all removals will fail:
+        uint minToken0Amount = 2;
+        // Token 0 needs to leave at least 2 in the global supply for an input transfer that will be one or greater with fees (beyond one) taken out:
+        uint maxToken0Amount = MAXIMUM_SUPPLY - 2;
+        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0Amount);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
-        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_SUPPLY );
+        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_SUPPLY);
 
-        uint maxOutputAmountInclusive = min(
-            // We need to ensure the computed input amount (covering 0.3% fees) does not exceed available input tokens (with one remaining):
-            ((_token0Amount * 997) / 1000) - 1,
-            // We also must ensure there are enough tokens left in global supply that the input transfer does not exceed total available:
-            divCeil((MAXIMUM_SUPPLY - _token0Amount) * 997, 1000) - 1);
-        _outputAmount = mapSeedToRange(outputAmountSeed, 1, maxOutputAmountInclusive + 1);
+        // We need to make sure there is enough liquidity to have one remaining, so max liquidity-based output is always one less than token amount:
+        uint maxOutputAmountLiquidity = _token0Amount - 1;
+        // We must also ensure enough tokens remain in global supply to allow the input transfer (when incorporating the 0.03% fee, rounding down):
+        uint maxOutputAmountTotalSupply = ((MAXIMUM_SUPPLY - _token0Amount) * 997) / 1000;
+        _outputAmount = mapSeedToRange(outputAmountSeed, 1, min(maxOutputAmountLiquidity, maxOutputAmountTotalSupply));
     }
 
     function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount) private {
@@ -224,7 +219,12 @@ contract UniswapV2PairTest is Test {
         uint inputAmount = computeOptimisticInputAmount(outputAmount);
         token0.transfer(address(pair), inputAmount);
 
-        vm.expectRevert('UniswapV2: K');
+        // The reason we revert may change depending on the relative values of the output amount and available liquidity:
+        if (outputAmount + 1 < token0Amount) {
+            vm.expectRevert("UniswapV2: K");
+        } else {
+            vm.expectRevert("UniswapV2: INSUFFICIENT_LIQUIDITY");
+        }
         pair.swap(outputAmount + 1, 0, address(this), '');
 
         // Don't expect revert
@@ -457,9 +457,9 @@ contract UniswapV2PairTest is Test {
         return a > b ? a : b;
     }
 
-    function mapSeedToRange(uint seed, uint minInclusive, uint maxExclusive) private returns (uint) {
-        require(minInclusive < maxExclusive, "minInclusive must be strictly less than maxExclusive");
-        uint rangeWidth = maxExclusive - minInclusive;
+    function mapSeedToRange(uint seed, uint minInclusive, uint maxInclusive) private returns (uint) {
+        require(minInclusive <= maxInclusive, "minInclusive must not exceed maxInclusive");
+        uint rangeWidth = maxInclusive - minInclusive + 1;
         return (seed % rangeWidth) + minInclusive;
     }
 }

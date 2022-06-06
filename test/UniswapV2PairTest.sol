@@ -6,6 +6,7 @@ import 'forge-std/Test.sol';
 import '../contracts/UniswapV2Pair.sol';
 import '../contracts/UniswapV2Factory.sol';
 import '../contracts/interfaces/IERC20.sol';
+import './shared/utilities.sol';
 
 contract UniswapV2PairTest is Test {
     IUniswapV2Factory private factory;
@@ -29,6 +30,7 @@ contract UniswapV2PairTest is Test {
 
     function setUp() public {
         vm.setNonce(address(this), 11); // used to order erc20's correctly in factory
+
         token0 = getStubToken(expandTo18Decimals(10000));
         token1 = getStubToken(expandTo18Decimals(10000));
 
@@ -64,7 +66,7 @@ contract UniswapV2PairTest is Test {
         assertEq(token0.balanceOf(address(pair)), token0Amount);
         assertEq(token1.balanceOf(address(pair)), token1Amount);
 
-        (uint112 _reserve0, uint112 _reserve1, uint32 _blockTimestampLast) = pair.getReserves();
+        (uint112 _reserve0, uint112 _reserve1, ) = pair.getReserves();
 
         assertEq(_reserve0, token0Amount);
         assertEq(_reserve1, token1Amount);
@@ -185,13 +187,12 @@ contract UniswapV2PairTest is Test {
 
         pair.swap(0, expectedOutputAmount, address(this), '');
 
-        (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast) = pair.getReserves();
+        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
         assertEq(reserve0, token0Amount + swapAmount);
         assertEq(reserve1, token1Amount - expectedOutputAmount);
         assertEq(token0.balanceOf(address(pair)), token0Amount + swapAmount);
         assertEq(token1.balanceOf(address(pair)), token1Amount - expectedOutputAmount);
 
-        uint256 totalSupplyToken0 = token0.totalSupply();
         uint256 totalSupplyToken1 = token1.totalSupply();
         assertEq(token0.balanceOf(address(this)), totalSupplyToken1 - token0Amount - swapAmount);
         assertEq(token1.balanceOf(address(this)), totalSupplyToken1 - token1Amount + expectedOutputAmount);
@@ -216,13 +217,12 @@ contract UniswapV2PairTest is Test {
 
         pair.swap(expectedOutputAmount, 0, address(this), '');
 
-        (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast) = pair.getReserves();
+        (uint112 reserve0, uint112 reserve1, ) = pair.getReserves();
         assertEq(reserve0, token0Amount - expectedOutputAmount);
         assertEq(reserve1, token1Amount + swapAmount);
         assertEq(token0.balanceOf(address(pair)), token0Amount - expectedOutputAmount);
         assertEq(token1.balanceOf(address(pair)), token1Amount + swapAmount);
 
-        uint256 totalSupplyToken0 = token0.totalSupply();
         uint256 totalSupplyToken1 = token1.totalSupply();
         assertEq(token0.balanceOf(address(this)), totalSupplyToken1 - token0Amount + expectedOutputAmount);
         assertEq(token1.balanceOf(address(this)), totalSupplyToken1 - token1Amount - swapAmount);
@@ -362,13 +362,9 @@ contract UniswapV2PairTest is Test {
         pair.mint(address(this));
     }
 
-    function mineBlock(uint256 block, uint256 timestamp) private {
-        vm.roll(block);
+    function mineBlock(uint256 _block, uint256 timestamp) private {
+        vm.roll(_block);
         vm.warp(timestamp);
-    }
-
-    function expandTo18Decimals(uint256 x) private pure returns (uint256) {
-        return x * (10**18);
     }
 
     function encodePrice(uint256 reserve0, uint256 reserve1) private pure returns (uint256 price0, uint256 price1) {
@@ -385,8 +381,8 @@ contract StubERC20 is IERC20 {
     mapping(address => uint256) private _balances;
     uint256 private _totalSupply;
 
-    constructor(uint256 totalSupply) {
-        _mint(msg.sender, totalSupply);
+    constructor(uint256 initTotalSupply) {
+        _mint(msg.sender, initTotalSupply);
     }
 
     function _mint(address account, uint256 amount) internal virtual {
@@ -424,20 +420,25 @@ contract StubERC20 is IERC20 {
         return true;
     }
 
-    function allowance(address owner, address spender) public view virtual override returns (uint256) {
+    function allowance(
+        address, /* owner */
+        address /* spender */
+    ) public view virtual override returns (uint256) {
         revert('allowance not used for tests.');
     }
 
-    function approve(address spender, uint256 amount) public virtual override returns (bool) {
+    function approve(
+        address, /* spender */
+        uint256 /* amount */
+    ) public virtual override returns (bool) {
         revert('approve not used for tests.');
     }
 
     function transferFrom(
-        address from,
-        address to,
-        uint256 amount
+        address, /* from */
+        address, /* to */
+        uint256 /* amount */
     ) public virtual override returns (bool) {
         revert('transferFrom not used for tests.');
-        return true;
     }
 }

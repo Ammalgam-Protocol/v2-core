@@ -136,7 +136,7 @@ contract UniswapV2ERC20Test is Test {
     }
 
 
-    function getDomainSeparator() internal returns (bytes32) {
+    function getDomainSeparator() internal view returns (bytes32) {
         return
             keccak256(
                 abi.encode(
@@ -155,7 +155,7 @@ contract UniswapV2ERC20Test is Test {
         uint256 value,
         uint256 nonce,
         uint256 deadline
-    ) internal returns (bytes32) {
+    ) internal view returns (bytes32) {
 
         bytes32 DOMAIN_SEPARATOR = getDomainSeparator();
 

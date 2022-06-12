@@ -14,7 +14,8 @@ contract UniswapV2PairTest is Test {
     IERC20 private token1;
 
     uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
-    uint112 constant MAXIMUM_SUPPLY = type(uint112).max ;
+    uint256 constant MAX_TOKEN = uint(type(uint112).max)**2;
+    uint112 constant MAXIMUM_UNI_RESERVE = type(uint112).max ;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Sync(uint112 reserve0, uint112 reserve1);
@@ -31,8 +32,8 @@ contract UniswapV2PairTest is Test {
 
     function setUp() public {
         vm.setNonce(address(this), 11); // used to order erc20's correctly in factory
-        token0 = getStubToken(MAXIMUM_SUPPLY);
-        token1 = getStubToken(MAXIMUM_SUPPLY);
+        token0 = getStubToken(MAX_TOKEN);
+        token1 = getStubToken(MAX_TOKEN);
 
         factory = new UniswapV2Factory(address(this));
 
@@ -105,40 +106,48 @@ contract UniswapV2PairTest is Test {
         runSwapTestCase(swapAmount, token0Amount, token1Amount);
     }
 
+    /**
+     * @notice The random seeds are mapped to acceptable bounds for the testSwapFuzzCase tests. Calculations
+     * for these bounds are numbered with refrences that can be found at:
+     * https://internal-hydrogen-adf.notion.site/Swap-test-case-fuzz-limits-9dc0e31ea47745879cdcca116275f28e
+     */
     function generateSwapFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
             returns (uint _swapAmount, uint _token0Amount, uint _token1Amount) {
 
-        // The swap amount cannot be zero, but others should be generally accepted:
-        uint minSwapAmount = 1;
-        // The swap amount cannot match/exceed token 0's amount (as it'd pull too much token 1 liquidity from the pool), so split max supply in half:
-        uint maxSwapAmount = MAXIMUM_SUPPLY/2; // +1 should fail as the swap input tranfer would fail
+        // See (8) in @notice link, there must always be one unit in the reserves and enough room for a swap of one without an overflow.
+        _token0Amount = mapSeedToRange(token0AmountSeed, 1, MAXIMUM_UNI_RESERVE - 1);
+
+        // See (20)
+        // Must be at least 2 to allow for reserves after removing a swap of unit 1, 
+        // Must meet the minimum mint liquidity, 
+        // Must be large enough to ensure any swap size will not overflow reserve0. 
+        uint minToken1Amount = max(
+            2, 
+            max(
+                (MINIMUM_LIQUIDITY + 1) ** 2 / _token0Amount + 1,
+                1000 * _token0Amount / (997 * (MAXIMUM_UNI_RESERVE - _token0Amount)) + 2)
+            );
+        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_UNI_RESERVE);
+
+        // See (18)
+        // The swap amount must be at least 1 and also large enough that the output is also at least 1.
+        uint minSwapAmount = max(1, 1000 * _token0Amount / (997 * (_token1Amount - 1)) + 1);
+        // The swap amount must not overflow the reserve veraible when added to it during the swap.
+        uint maxSwapAmount = MAXIMUM_UNI_RESERVE - _token0Amount;
         _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmount);
-
-        // Token 0 needs to be at least one more than the swap amount (otherwise it'd drain all liquidity):
-        uint minToken0Amount = _swapAmount + 1;
-        // Token 0 needs to leave enough in the global supply for the client to transfer as part of the swap:
-        uint maxToken0AmountSwapInclusive = MAXIMUM_SUPPLY - _swapAmount;
-        // Token 0 also needs to ensure the required amount for token 1 does not exceed max supply:
-        uint netSwapAmountAdjusted = _swapAmount * 997;
-        uint maxToken0AmountSwapToken1 = (netSwapAmountAdjusted * (MAXIMUM_SUPPLY - 1) / 1000);
-        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, min(maxToken0AmountSwapInclusive, maxToken0AmountSwapToken1));
-
-        // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
-        uint minToken1AmountLiquidity = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
-        // Make sure we will have enough output tokens for the output amount to be non-zero for the swap input:
-        uint token0AmountAdjusted = _token0Amount * 1000;
-        uint minToken1ForSwap = divCeil(token0AmountAdjusted + netSwapAmountAdjusted, netSwapAmountAdjusted);
-        // Token 1 can take all of the global supply without constraints:
-        uint maxToken1AmountInclusive = MAXIMUM_SUPPLY;
-        _token1Amount = mapSeedToRange(token1AmountSeed, max(minToken1AmountLiquidity, minToken1ForSwap), maxToken1AmountInclusive);
     }
 
     function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), swapAmount);
         uint expected = computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount);
+        if (expected + 1 < token1Amount) {
+          vm.expectRevert("UniswapV2: K");
+        } else {
+          // swap will leave reserves at 0
+          vm.expectRevert("UniswapV2: INSUFFICIENT_LIQUIDITY");
+        }
 
-        vm.expectRevert('UniswapV2: K');
         pair.swap(0, expected + 1, address(this), '');
 
         // Don't expect revert
@@ -209,7 +218,7 @@ contract UniswapV2PairTest is Test {
         // We need to make sure there is enough liquidity to have one remaining, so max liquidity-based output is always one less than token amount:
         uint maxOutputAmountLiquidity = _token0Amount - 1;
         // We must also ensure enough tokens remain in global supply to allow the input transfer (when incorporating the 0.03% fee, rounding down):
-        uint maxOutputAmountTotalSupply = ((MAXIMUM_SUPPLY - _token0Amount) * 997) / 1000;
+        uint maxOutputAmountTotalSupply = ((MAXIMUM_UNI_RESERVE - _token0Amount) * 997) / 1000;
         _outputAmount = mapSeedToRange(outputAmountSeed, 1, min(maxOutputAmountLiquidity, maxOutputAmountTotalSupply));
     }
 

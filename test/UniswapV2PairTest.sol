@@ -125,14 +125,14 @@ contract UniswapV2PairTest is Test {
         uint minToken1Amount = max(
             2, 
             max(
-                (MINIMUM_LIQUIDITY + 1) ** 2 / _token0Amount + 1,
-                1000 * _token0Amount / (997 * (MAXIMUM_UNI_RESERVE - _token0Amount)) + 2)
+                divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount),
+                divCeil(1000 * _token0Amount, 997 * (MAXIMUM_UNI_RESERVE - _token0Amount)) + 1)
             );
         _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_UNI_RESERVE);
 
         // See (18)
         // The swap amount must be at least 1 and also large enough that the output is also at least 1.
-        uint minSwapAmount = max(1, 1000 * _token0Amount / (997 * (_token1Amount - 1)) + 1);
+        uint minSwapAmount = max(1, divCeil(1000 * _token0Amount, (997 * (_token1Amount - 1))));
         // The swap amount must not overflow the reserve veraible when added to it during the swap.
         uint maxSwapAmount = MAXIMUM_UNI_RESERVE - _token0Amount;
         _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmount);

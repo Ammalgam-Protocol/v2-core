@@ -15,7 +15,7 @@ contract UniswapV2PairTest is Test {
     IERC20 private token1;
 
     uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
-    uint256 constant MAX_TOKEN = uint(type(uint112).max)**2;
+    uint256 constant MAX_TOKEN = uint(type(uint112).max) ** 2;
     uint112 constant MAXIMUM_UNI_RESERVE = type(uint112).max ;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
@@ -207,14 +207,11 @@ contract UniswapV2PairTest is Test {
             returns (uint _outputAmount, uint _token0Amount, uint _token1Amount) {
 
         // Token 0 needs at least: A) one output amount to take out and B) one remaining, otherwise all removals will fail:
-        uint minToken0Amount = 2;
-        // Token 0 needs to leave at least 2 in the global supply for an input transfer that will be one or greater with fees (beyond one) taken out:
-        uint maxToken0Amount = MAXIMUM_SUPPLY - 2;
-        _token0Amount = mapSeedToRange(token0AmountSeed, minToken0Amount, maxToken0Amount);
+        _token0Amount = mapSeedToRange(token0AmountSeed, 2, MAXIMUM_UNI_RESERVE);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
         uint minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
-        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_SUPPLY);
+        _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_UNI_RESERVE);
 
         // We need to make sure there is enough liquidity to have one remaining, so max liquidity-based output is always one less than token amount:
         uint maxOutputAmountLiquidity = _token0Amount - 1;

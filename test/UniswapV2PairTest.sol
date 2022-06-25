@@ -14,9 +14,9 @@ contract UniswapV2PairTest is Test {
     IERC20 private token0;
     IERC20 private token1;
 
-    uint112 constant MINIMUM_LIQUIDITY = 10 ** 3;
-    uint256 constant MAX_TOKEN = uint(type(uint112).max) ** 2;
-    uint112 constant MAXIMUM_UNI_RESERVE = type(uint112).max ;
+    uint112 constant MINIMUM_LIQUIDITY = 10**3;
+    uint256 constant MAX_TOKEN = uint256(type(uint112).max)**2;
+    uint112 constant MAXIMUM_UNI_RESERVE = type(uint112).max;
 
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event Sync(uint112 reserve0, uint112 reserve1);
@@ -102,8 +102,16 @@ contract UniswapV2PairTest is Test {
         runSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(1000), expandTo18Decimals(1000));
     }
 
-    function testSwapFuzzTestCase(uint swapVal, uint token0Val, uint token1Val) public {
-        (uint swapAmount, uint token0Amount, uint token1Amount) = generateSwapFuzzCase(swapVal, token0Val, token1Val);
+    function testSwapFuzzTestCase(
+        uint256 swapVal,
+        uint256 token0Val,
+        uint256 token1Val
+    ) public {
+        (uint256 swapAmount, uint256 token0Amount, uint256 token1Amount) = generateSwapFuzzCase(
+            swapVal,
+            token0Val,
+            token1Val
+        );
         runSwapTestCase(swapAmount, token0Amount, token1Amount);
     }
 
@@ -112,41 +120,56 @@ contract UniswapV2PairTest is Test {
      * for these bounds are numbered with refrences that can be found at:
      * https://internal-hydrogen-adf.notion.site/Swap-test-case-fuzz-limits-9dc0e31ea47745879cdcca116275f28e
      */
-    function generateSwapFuzzCase(uint swapSeed, uint token0AmountSeed, uint token1AmountSeed) private
-            returns (uint _swapAmount, uint _token0Amount, uint _token1Amount) {
-
-        // See (8) in @notice link, there must always be one unit in the reserves and enough room for a swap of one without an overflow.
+    function generateSwapFuzzCase(
+        uint256 swapSeed,
+        uint256 token0AmountSeed,
+        uint256 token1AmountSeed
+    )
+        private
+        returns (
+            uint256 _swapAmount,
+            uint256 _token0Amount,
+            uint256 _token1Amount
+        )
+    {
+        // See (8) in @notice link, there must always be one unit in the reserves and enough room for a swap
+        // of one without an overflow.
         _token0Amount = mapSeedToRange(token0AmountSeed, 1, MAXIMUM_UNI_RESERVE - 1);
 
-        // See (20)
-        // Must be at least 2 to allow for reserves after removing a swap of unit 1, 
-        // Must meet the minimum mint liquidity, 
-        // Must be large enough to ensure any swap size will not overflow reserve0. 
-        uint minToken1Amount = max(
-            2, 
+        // See (19)
+        // Must be at least 2 to allow for reserves after removing a swap of unit 1,
+        // Must meet the minimum mint liquidity,
+        // Must be large enough to ensure any swap size will not overflow reserve0.
+        uint256 minToken1Amount = max(
+            2,
             max(
-                divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount),
-                divCeil(1000 * _token0Amount, 997 * (MAXIMUM_UNI_RESERVE - _token0Amount)) + 1)
-            );
+                divCeil((MINIMUM_LIQUIDITY + 1)**2, _token0Amount),
+                divCeil(1000 * _token0Amount, 997 * (MAXIMUM_UNI_RESERVE - _token0Amount)) + 1
+            )
+        );
         _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_UNI_RESERVE);
 
-        // See (18)
+        // See (17)
         // The swap amount must be at least 1 and also large enough that the output is also at least 1.
-        uint minSwapAmount = max(1, divCeil(1000 * _token0Amount, (997 * (_token1Amount - 1))));
+        uint256 minSwapAmount = max(1, divCeil(1000 * _token0Amount, (997 * (_token1Amount - 1))));
         // The swap amount must not overflow the reserve veraible when added to it during the swap.
-        uint maxSwapAmount = MAXIMUM_UNI_RESERVE - _token0Amount;
+        uint256 maxSwapAmount = MAXIMUM_UNI_RESERVE - _token0Amount;
         _swapAmount = mapSeedToRange(swapSeed, minSwapAmount, maxSwapAmount);
     }
 
-    function runSwapTestCase(uint swapAmount, uint token0Amount, uint token1Amount) private {
+    function runSwapTestCase(
+        uint256 swapAmount,
+        uint256 token0Amount,
+        uint256 token1Amount
+    ) private {
         addLiquidity(token0Amount, token1Amount);
         token0.transfer(address(pair), swapAmount);
-        uint expected = computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount);
+        uint256 expected = computeExpectedSwapAmount(swapAmount, token0Amount, token1Amount);
         if (expected + 1 < token1Amount) {
-          vm.expectRevert("UniswapV2: K");
+            vm.expectRevert('UniswapV2: K');
         } else {
-          // swap will leave reserves at 0
-          vm.expectRevert("UniswapV2: INSUFFICIENT_LIQUIDITY");
+            // swap will leave reserves at 0
+            vm.expectRevert('UniswapV2: INSUFFICIENT_LIQUIDITY');
         }
 
         pair.swap(0, expected + 1, address(this), '');
@@ -155,81 +178,90 @@ contract UniswapV2PairTest is Test {
         pair.swap(0, expected, address(this), '');
     }
 
-    function computeExpectedSwapAmount(uint swapAmount, uint token0Amount, uint token1Amount) private returns (uint256) {
+    function computeExpectedSwapAmount(
+        uint256 swapAmount,
+        uint256 token0Amount,
+        uint256 token1Amount
+    ) private returns (uint256) {
         // Compute new balance for token 0 with fees reduced (multiplied by 1000):
-        uint newBalance0Adjusted = ((token0Amount + swapAmount) * 1000) - (swapAmount * 3);
+        uint256 newBalance0Adjusted = ((token0Amount + swapAmount) * 1000) - (swapAmount * 3);
 
         // Determine new target K value when the adjusted balances are multiplied (1000x what it should be to match previous units):
-        uint kAdjusted = token0Amount * token1Amount * 1000;
+        uint256 kAdjusted = token0Amount * token1Amount * 1000;
 
         // Find the new target balance for token 1 and subtract it from the original amount to get expected output:
         return token1Amount - divCeil(kAdjusted, newBalance0Adjusted);
     }
 
     function testOptimisticTestCase1() public {
-        runOptimisticSwapTestCase(
-            997000000000000000,
-            expandTo18Decimals(5),
-            expandTo18Decimals(10)
-        );
+        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(10));
     }
 
     function testOptimisticTestCase2() public {
-        runOptimisticSwapTestCase(
-            997000000000000000,
-            expandTo18Decimals(10),
-            expandTo18Decimals(5)
-        );
+        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(10), expandTo18Decimals(5));
     }
 
     function testOptimisticTestCase3() public {
-        runOptimisticSwapTestCase(
-            997000000000000000,
-            expandTo18Decimals(5),
-            expandTo18Decimals(5)
-        );
+        runOptimisticSwapTestCase(997000000000000000, expandTo18Decimals(5), expandTo18Decimals(5));
     }
 
     function testOptimisticTestCase4() public {
-        runOptimisticSwapTestCase(
-            expandTo18Decimals(1),
-            expandTo18Decimals(5),
-            expandTo18Decimals(5)
-        );
+        runOptimisticSwapTestCase(expandTo18Decimals(1), expandTo18Decimals(5), expandTo18Decimals(5));
     }
 
-    function testOptimisticFuzzTestCase(uint outputVal, uint token0Val, uint token1Val) public {
-        (uint outputAmount, uint token0Amount, uint token1Amount) = generateOptimisticFuzzCase(outputVal, token0Val, token1Val);
+    function testOptimisticFuzzTestCase(
+        uint256 outputVal,
+        uint256 token0Val,
+        uint256 token1Val
+    ) public {
+        (uint256 outputAmount, uint256 token0Amount, uint256 token1Amount) = generateOptimisticFuzzCase(
+            outputVal,
+            token0Val,
+            token1Val
+        );
         runOptimisticSwapTestCase(outputAmount, token0Amount, token1Amount);
     }
 
-    function generateOptimisticFuzzCase(uint outputAmountSeed, uint token0AmountSeed, uint token1AmountSeed) private
-            returns (uint _outputAmount, uint _token0Amount, uint _token1Amount) {
-
+    function generateOptimisticFuzzCase(
+        uint256 outputAmountSeed,
+        uint256 token0AmountSeed,
+        uint256 token1AmountSeed
+    )
+        private
+        returns (
+            uint256 _outputAmount,
+            uint256 _token0Amount,
+            uint256 _token1Amount
+        )
+    {
         // Token 0 needs at least: A) one output amount to take out and B) one remaining, otherwise all removals will fail:
         _token0Amount = mapSeedToRange(token0AmountSeed, 2, MAXIMUM_UNI_RESERVE);
 
         // The liquidity between the token amounts needs to be 1001 or greater or else mint will fail:
-        uint minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1) ** 2, _token0Amount);
+        uint256 minToken1Amount = divCeil((MINIMUM_LIQUIDITY + 1)**2, _token0Amount);
         _token1Amount = mapSeedToRange(token1AmountSeed, minToken1Amount, MAXIMUM_UNI_RESERVE);
 
         // We need to make sure there is enough liquidity to have one remaining, so max liquidity-based output is always one less than token amount:
-        uint maxOutputAmountLiquidity = _token0Amount - 1;
+        uint256 maxOutputAmountLiquidity = _token0Amount - 1;
         // We must also ensure enough tokens remain in global supply to allow the input transfer (when incorporating the 0.03% fee, rounding down):
-        uint maxOutputAmountTotalSupply = ((MAXIMUM_UNI_RESERVE - _token0Amount) * 997) / 1000;
+        uint256 maxOutputAmountTotalSupply = ((MAXIMUM_UNI_RESERVE - _token0Amount) * 997) / 1000;
         _outputAmount = mapSeedToRange(outputAmountSeed, 1, min(maxOutputAmountLiquidity, maxOutputAmountTotalSupply));
     }
 
-    function runOptimisticSwapTestCase(uint outputAmount, uint token0Amount, uint token1Amount) private {
+    function runOptimisticSwapTestCase(
+        uint256 outputAmount,
+        uint256 token0Amount,
+        uint256 token1Amount
+    ) private {
         addLiquidity(token0Amount, token1Amount);
-        uint inputAmount = computeOptimisticInputAmount(outputAmount);
+        uint256 inputAmount = computeOptimisticInputAmount(outputAmount);
         token0.transfer(address(pair), inputAmount);
 
         // The reason we revert may change depending on the relative values of the output amount and available liquidity:
         if (outputAmount + 1 < token0Amount) {
-            vm.expectRevert("UniswapV2: K");
+            vm.expectRevert('UniswapV2: K');
         } else {
-            vm.expectRevert("UniswapV2: INSUFFICIENT_LIQUIDITY");
+            vm.expectRevert('UniswapV2: INSUFFICIENT_LIQUIDITY');
         }
         pair.swap(outputAmount + 1, 0, address(this), '');
 
@@ -425,7 +457,7 @@ contract UniswapV2PairTest is Test {
         assertEq(token1.balanceOf(address(pair)), 1000 + 250000187312969);
     }
 
-    function computeOptimisticInputAmount(uint outputAmount) private returns (uint256) {
+    function computeOptimisticInputAmount(uint256 outputAmount) private returns (uint256) {
         // The output amount is always 99.7% of the input amount, so simply reverse it out (and round up if needed):
         return divCeil(outputAmount * 1000, 997);
     }
@@ -450,22 +482,26 @@ contract UniswapV2PairTest is Test {
         return new StubERC20(mintAmount_);
     }
 
-    function divCeil(uint numerand, uint divisor) private returns (uint) {
-        uint roundUpAmount = numerand % divisor == 0 ? 0 : 1;
+    function divCeil(uint256 numerand, uint256 divisor) private returns (uint256) {
+        uint256 roundUpAmount = numerand % divisor == 0 ? 0 : 1;
         return (numerand / divisor) + roundUpAmount;
     }
 
-    function min(uint a, uint b) private returns (uint) {
+    function min(uint256 a, uint256 b) private returns (uint256) {
         return a < b ? a : b;
     }
 
-    function max(uint a, uint b) private returns (uint) {
+    function max(uint256 a, uint256 b) private returns (uint256) {
         return a > b ? a : b;
     }
 
-    function mapSeedToRange(uint seed, uint minInclusive, uint maxInclusive) private returns (uint) {
-        require(minInclusive <= maxInclusive, "minInclusive must not exceed maxInclusive");
-        uint rangeWidth = maxInclusive - minInclusive + 1;
+    function mapSeedToRange(
+        uint256 seed,
+        uint256 minInclusive,
+        uint256 maxInclusive
+    ) private returns (uint256) {
+        require(minInclusive <= maxInclusive, 'minInclusive must not exceed maxInclusive');
+        uint256 rangeWidth = maxInclusive - minInclusive + 1;
         return (seed % rangeWidth) + minInclusive;
     }
 }

@@ -2,7 +2,7 @@
 src = 'contracts'
 out = 'build'
 libs = ['lib']
-fuzz_runs = 8197
+fuzz_runs = 5000
 
 gas_reports = ["*"]
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

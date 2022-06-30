@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.13;
 
 import 'forge-std/Test.sol';
@@ -17,16 +17,15 @@ contract UniswapV2ERC20Test is Test {
     uint256 TOTAL_SUPPLY = expandTo18Decimals(10000);
     uint256 TEST_AMOUNT = expandTo18Decimals(10);
 
-    bytes32 PERMIT_TYPEHASH = keccak256(
-                abi.encodePacked('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)')
-            );
-
+    bytes32 PERMIT_TYPEHASH =
+        keccak256(
+            abi.encodePacked('Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)')
+        );
 
     event Approval(address indexed owner, address indexed spender, uint256 value);
     event Transfer(address indexed from, address indexed to, uint256 value);
 
     function setUp() public {
-
         // setup the chainid to 1 instead of 31337 (default)
         // set it up before ERC20 created.
         vm.chainId(1);
@@ -34,7 +33,6 @@ contract UniswapV2ERC20Test is Test {
         wallet = address(this);
         other = vm.addr(2);
         token = new ERC20(TOTAL_SUPPLY);
-
     }
 
     function testTokenInfo() public {
@@ -112,13 +110,7 @@ contract UniswapV2ERC20Test is Test {
         uint256 nonce = token.nonces(wallet);
         uint256 deadline = type(uint256).max;
 
-        bytes32 digest = getApprovalDigest(
-            wallet,
-            other,
-            TEST_AMOUNT,
-            nonce,
-            deadline
-        );
+        bytes32 digest = getApprovalDigest(wallet, other, TEST_AMOUNT, nonce, deadline);
 
         //Sign a digest digest with private key
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privatekey, digest);
@@ -132,9 +124,7 @@ contract UniswapV2ERC20Test is Test {
         token.permit(wallet, other, TEST_AMOUNT, deadline, v, r, s);
         assertEq(token.allowance(wallet, other), TEST_AMOUNT);
         assertEq(token.nonces(wallet), 1);
-
     }
-
 
     function getDomainSeparator() internal view returns (bytes32) {
         return
@@ -143,7 +133,7 @@ contract UniswapV2ERC20Test is Test {
                     keccak256('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'),
                     keccak256(bytes(token.name())),
                     keccak256(bytes('1')),
-                    1,  //chainId
+                    1, //chainId
                     address(token)
                 )
             );
@@ -156,7 +146,6 @@ contract UniswapV2ERC20Test is Test {
         uint256 nonce,
         uint256 deadline
     ) internal view returns (bytes32) {
-
         bytes32 DOMAIN_SEPARATOR = getDomainSeparator();
 
         return
@@ -169,5 +158,4 @@ contract UniswapV2ERC20Test is Test {
                 )
             );
     }
-
 }

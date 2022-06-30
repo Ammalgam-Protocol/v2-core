@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.13;
 
 function expandTo18Decimals(uint256 x) pure returns (uint256) {

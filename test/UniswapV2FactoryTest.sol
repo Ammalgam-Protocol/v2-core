@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.13;
 
 import 'forge-std/Test.sol';
@@ -15,8 +15,7 @@ contract UniswapV2FactoryTest is Test {
     address private wallet;
     address private other;
 
-    address[] TEST_ADDRESSES = [0x1000000000000000000000000000000000000000,
-        0x2000000000000000000000000000000000000000];
+    address[] TEST_ADDRESSES = [0x1000000000000000000000000000000000000000, 0x2000000000000000000000000000000000000000];
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint256);
 

@@ -14,6 +14,7 @@ The following assumes the use of `node@>=10`.
 ## Install Dependencies
 
 `yarn`
+`forge install`
 
 ## Compile Contracts
 
@@ -22,3 +23,4 @@ The following assumes the use of `node@>=10`.
 ## Run Tests
 
 `yarn test`
+`forge test`

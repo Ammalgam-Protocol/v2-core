@@ -30,9 +30,12 @@
     "mocha": "^6.2.2",
     "prettier": "^1.19.1",
     "rimraf": "^3.0.0",
-    "solc": "0.5.16",
+    "solc": "0.8.13",
     "ts-node": "^8.5.4",
     "typescript": "^3.7.3"
+  },
+  "resolutions": {
+    "solc/commander": "^3.0.2"
   },
   "scripts": {
     "lint": "yarn prettier ./test/*.ts --check",
@@ -44,5 +47,8 @@
     "test": "mocha",
     "prepublishOnly": "yarn test"
   },
-  "license": "GPL-3.0-or-later"
+  "license": "GPL-3.0-only",
+  "dependencies": {
+    "commander": "^2.8.1"
+  }
 }

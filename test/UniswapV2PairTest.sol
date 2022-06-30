@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: GPL-3.0-only
 pragma solidity ^0.8.13;
 
 import 'forge-std/Test.sol';
@@ -125,7 +125,8 @@ contract UniswapV2PairTest is Test {
         uint256 token0AmountSeed,
         uint256 token1AmountSeed
     )
-        private pure
+        private
+        pure
         returns (
             uint256 _swapAmount,
             uint256 _token0Amount,
@@ -227,7 +228,8 @@ contract UniswapV2PairTest is Test {
         uint256 token0AmountSeed,
         uint256 token1AmountSeed
     )
-        private pure
+        private
+        pure
         returns (
             uint256 _outputAmount,
             uint256 _token0Amount,
